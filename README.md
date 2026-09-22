@@ -1,6 +1,6 @@
 # ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/minios-linux/minios-live/total?style=for-the-badge&logoSize=30&label=%20TOTAL%20DOWNLOADS&labelColor=white&color=orange)
 
-<img width="1280" height="800" alt="MiniOS Standard" src="https://github.com/user-attachments/assets/e1026126-1a33-4a62-9122-f1ac4d23399d" />
+<img width="1280" height="800" alt="MiniOS Standard" src="images/minios.png" />
 
 MiniOS is a reliable and user-friendly portable system with a graphical interface. These scripts build a bootable MiniOS ISO image.
 
@@ -47,3 +47,49 @@ What you get:
 - **MiniOS tooling.** The installer, module manager, store, kernel manager and the rest of the MiniOS utilities are all present.
 
 Upstream MiniOS remains the reference project; this fork tracks it and only adds what is described above.
+
+## 🪟 Building on Windows with Debian WSL
+
+You do not need a Linux machine to build this. Windows can run Debian inside itself (WSL), and the repository ships a helper script that does the rest.
+
+**1. Install Debian from the Microsoft Store**
+
+Open the Microsoft Store, search for **Debian**, and install it. Launch it once from the Start menu; it will ask you to pick a username and password. You can close it afterwards.
+
+If launching it complains that WSL is not enabled, open PowerShell as Administrator, run `wsl --install`, reboot, and try again.
+
+**2. Get this repository onto your PC**
+
+Either use GitHub Desktop / `git clone`, or click **Code → Download ZIP** on GitHub and unzip it. Any folder is fine, for example `C:\Users\you\Documents\GitHub\minios-live`.
+
+**3. Prepare Debian (once)**
+
+Open PowerShell or Windows Terminal and run the command below, replacing the path with wherever you put the repository. Note that Windows paths are written as `/mnt/c/...` here:
+
+```powershell
+wsl -d Debian -u root -- bash /mnt/c/Users/you/Documents/GitHub/minios-live/tools/wsl-build.sh setup
+```
+
+This installs the build tools inside Debian. You only need to do it the first time.
+
+**4. Build the ISO**
+
+```powershell
+wsl -d Debian -u root -- bash /mnt/c/Users/you/Documents/GitHub/minios-live/tools/wsl-build.sh build -
+```
+
+This takes a while (30 minutes to a couple of hours depending on your PC and internet connection) and needs around 20 GB of free space on your Windows drive. Leave the window open until it says the image has been created.
+
+**5. Copy the ISO to Windows**
+
+```powershell
+wsl -d Debian -u root -- bash /mnt/c/Users/you/Documents/GitHub/minios-live/tools/wsl-build.sh fetch-iso
+```
+
+The finished `.iso` appears in a `build-output` folder inside the repository. Write it to a USB stick with [Rufus](https://rufus.ie) or [Ventoy](https://www.ventoy.net), or boot it in a virtual machine.
+
+**Good to know**
+
+- Building again after a change is faster: parts that have not changed are reused.
+- `wsl-build.sh clean` removes the whole build area inside Debian if you want to start fresh.
+- Do not run the build from inside a Windows folder in Debian directly; the helper script takes care of copying the files to where Debian can build them.
