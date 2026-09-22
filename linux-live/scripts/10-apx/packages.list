@@ -1,0 +1,25 @@
+# ============================================================================
+# == Apx (Vanilla OS) -- runtime dependencies                               ==
+# ============================================================================
+#
+# Apx itself is a single static Go binary compiled by this module's `install`
+# script; it is not in the Debian archive.  Apx bundles its own copy of
+# distrobox under /usr/share/apx/distrobox, so the distribution's distrobox
+# package is deliberately not installed here.
+#
+# Only the container runtime and the rootless plumbing come from apt.
+
+podman
+uidmap
+slirp4netns
+fuse-overlayfs
+catatonit
+ca-certificates
+
+# podman 5 prefers pasta over slirp4netns for rootless networking; keep both so
+# either backend works.
+passt
+
+# Apx drives podman over a normal shell; these are what distrobox itself shells
+# out to.
+curl

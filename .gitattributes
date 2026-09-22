@@ -1,0 +1,6 @@
+# This repository is normally checked out on Windows with core.autocrlf=true,
+# which gives the working tree CRLF endings.  tools/wsl-build.sh is executed
+# straight out of that working tree by
+#   wsl -d Debian -- bash /mnt/c/.../tools/wsl-build.sh
+# so a CRLF shebang would break it before it can do anything.  Pin it to LF.
+tools/wsl-build.sh text eol=lf

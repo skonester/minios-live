@@ -81,13 +81,13 @@ Scalar filters use exact string equality. Inside the **01-kernel** build flow, *
 The default **build.conf** currently lists:
 
 **DISTRIBUTION**
-:   Debian **buster**, **bullseye**, **bookworm**, **trixie**; Ubuntu **bionic**, **focal**, **jammy**, **noble**, **resolute**; or Devuan **beowulf**, **chimaera**, **daedalus**, **excalibur**.
+:   Debian **buster**, **bullseye**, **bookworm**, **trixie**, **forky**; Ubuntu **bionic**, **focal**, **jammy**, **noble**, **resolute**; or Devuan **beowulf**, **chimaera**, **daedalus**, **excalibur**.
 
 **DISTRIBUTION_ARCH**
 :   **amd64**, **i386**, or **i386-pae**.
 
 **DESKTOP_ENVIRONMENT**
-:   **core**, **flux**, **xfce**, or **lxqt**.
+:   **core**, **flux**, **xfce**, **lxqt**, or **ukui**. The **ukui** environment requires **forky** or newer; **trixie** has no **ukui-panel**, **ukui-session-manager** or **ukui-control-center**.
 
 **PACKAGE_VARIANT**
 :   **minimum**, **standard**, **toolbox**, or **ultra**. The builder normalizes Flux to **minimum**.

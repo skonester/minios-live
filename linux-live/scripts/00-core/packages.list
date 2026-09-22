@@ -129,7 +129,11 @@ cifs-utils -pv=minimum
 nfs-common -pv=minimum
 ipset -pv=minimum
 fuse3 -pv=minimum || fuse -pv=minimum
-libfuse2 -pv=minimum
+# forky has no libfuse2 of its own; it comes from trixie via the minios-fuse2
+# pin (see linux-live/minioslib).  The package is named libfuse2t64 there and
+# Provides: libfuse2, so request the real package name on forky.
+libfuse2 -pv=minimum -d=forky
+libfuse2t64 -pv=minimum +d=forky
 dynfilefs -pv=minimum -d=buster -d=beowulf -d=bullseye -d=chimaera
 dynblk -pv=minimum
 parted -pv=minimum

@@ -1,0 +1,198 @@
+#!/bin/bash
+#
+# UKUI desktop module.
+#
+# Modelled on 04-xfce-desktop/install.  The differences worth knowing:
+#   * UKUI's session binary is `ukui-session`; the /usr/share/xsessions entry
+#     comes from ukui-session-manager-data.
+#   * ukui-panel, ukui-menu and ukui-settings-daemon start from
+#     /etc/xdg/autostart, not from a session file, so nothing needs wiring up.
+#   * ukui-greeter ships its own LightDM drop-in at
+#     /usr/share/lightdm/lightdm.conf.d/95-ukui-greeter.conf.
+
+set -e          # exit on error
+set -o pipefail # exit on pipeline error
+set -u          # treat unset variable as error
+
+. /minioslib
+. /minios_build.conf
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+# ---------------------------------------------------------------------------
+# Refuse suites that cannot provide a complete UKUI session.
+#
+# Debian trixie carries peony, ukwm and ukui-settings-daemon but not
+# ukui-panel, ukui-session-manager or ukui-control-center: those three were
+# dropped during the UKUI 3.x -> 4.x Qt6 rewrite and only returned in forky.
+# Without them apt still resolves a large part of this list, and the build
+# would produce an image that boots to an empty root window.  Fail loudly
+# instead.
+# ---------------------------------------------------------------------------
+REQUIRED_SESSION_PACKAGES="ukui-session-manager ukui-panel ukui-control-center"
+
+# condinapt refreshes the package cache itself, but this check runs before it,
+# so make sure apt has lists to answer from.  Without this an empty cache would
+# look identical to a suite that is missing the packages.
+[ -s /var/cache/apt/pkgcache.bin ] || apt-get update -qq
+
+MISSING=""
+for PKG in ${REQUIRED_SESSION_PACKAGES}; do
+    # A package absent from the archive prints nothing; one present only as an
+    # unsatisfied dependency name prints "Candidate: (none)".  Both are fatal.
+    CANDIDATE="$(apt-cache policy "${PKG}" 2>/dev/null | sed -n 's/^  Candidate: //p')"
+    if [ -z "${CANDIDATE}" ] || [ "${CANDIDATE}" = "(none)" ]; then
+        MISSING="${MISSING} ${PKG}"
+    fi
+done
+if [ -n "${MISSING}" ]; then
+    echo "ERROR: the UKUI session is incomplete on '${DISTRIBUTION}'." >&2
+    echo "       No installation candidate for:${MISSING}" >&2
+    echo "       Use DISTRIBUTION=\"forky\" (Debian 14) or newer." >&2
+    exit 1
+fi
+
+rm -rf /usr/share/backgrounds
+
+# ukui-themes registers the x-cursor-theme alternative, whose link lives at
+# /usr/share/icons/default/index.theme.  update-alternatives will not create
+# the parent directory, and nothing in the MiniOS package set ships it -- the
+# cursor themes present here (Adwaita, Breeze_Light, elementary-minios) all
+# install into their own named directories.  Without this the postinst dies
+# with:
+#   update-alternatives: error: cannot create symbolic link
+#   '/usr/share/icons/default/index.theme.dpkg-tmp': No such file or directory
+# which then cascades into ukui-control-center and ukui-media.
+mkdir -p /usr/share/icons/default
+
+if ! /condinapt -l "${SCRIPT_DIR}/packages.list" -c "${SCRIPT_DIR}/minios_build.conf" -m "${SCRIPT_DIR}/condinapt.map"; then
+    echo "Failed to install packages."
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Remove packaged distribution wallpapers while preserving MiniOS packages and
+# rootcopy assets.  ukui-wallpapers and ukui-themes drop a lot into
+# /usr/share/wallpapers and /usr/share/backgrounds.
+# ---------------------------------------------------------------------------
+for WALLPAPER_DIR in \
+    /usr/share/backgrounds \
+    /usr/share/wallpapers \
+    /usr/share/ukui/faces; do
+    [ -d "$WALLPAPER_DIR" ] || continue
+
+    while IFS= read -r -d '' WALLPAPER; do
+        WALLPAPER_OWNER="$(dpkg-query -S "$WALLPAPER" 2>/dev/null || true)"
+        [ -n "$WALLPAPER_OWNER" ] || continue
+
+        case "$WALLPAPER_OWNER" in
+        minios*) continue ;;
+        esac
+
+        rm -f -- "$WALLPAPER"
+    done < <(
+        find "$WALLPAPER_DIR" -mindepth 1 \
+            \( -type f -o -type l \) -print0
+    )
+done
+
+# ---------------------------------------------------------------------------
+# Display manager.
+# ---------------------------------------------------------------------------
+if [ "${PACKAGE_VARIANT}" = "minimum" ]; then
+    # nodm autologins straight into the session named by /etc/X11/Xsession.
+    cat <<'NODM' >/etc/default/nodm
+# nodm configuration
+
+# Set NODM_ENABLED to something different than 'false' to enable nodm
+NODM_ENABLED=true
+
+# User to autologin for
+NODM_USER=live
+
+# First vt to try when looking for free VTs
+NODM_FIRST_VT=7
+
+# X session
+NODM_XSESSION=/etc/X11/Xsession
+
+# Options for nodm itself
+NODM_OPTIONS=
+
+# Options for the X server.
+NODM_X_OPTIONS='-nolisten tcp'
+
+# If an X session will run for less than this time in seconds, nodm will wait an
+# increasing bit of time before restarting the session.
+NODM_MIN_SESSION_TIME=60
+
+# Timeout (in seconds) to wait for X to be ready to accept connections.
+NODM_X_TIMEOUT=300
+NODM
+else
+    # ukui-greeter installs /usr/share/lightdm/lightdm.conf.d/95-ukui-greeter.conf
+    # which already selects itself as the greeter.  Only the default session and
+    # autologin user still need setting.
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat <<LIGHTDM >/etc/lightdm/lightdm.conf.d/60-minios-ukui.conf
+[Seat:*]
+user-session=ukui
+autologin-user=${LIVE_USERNAME}
+autologin-user-timeout=0
+LIGHTDM
+fi
+
+# ---------------------------------------------------------------------------
+# Wallpaper.
+#
+# UKUI is a MATE fork and its settings daemon reads the background from the
+# MATE schema, org.mate.background (path /org/mate/desktop/background/);
+# org.ukui.interface carries the same two keys.  Both are set so whichever
+# component draws the desktop picks up the MiniOS artwork.
+#
+# A gschema override changes the schema *default*, which applies to every user
+# without needing a dconf profile.  Debian ships no /etc/dconf/profile/user
+# here, so writing to /etc/dconf/db/local.d alone would have had no effect.
+# ---------------------------------------------------------------------------
+MINIOS_WALLPAPER="$(find /usr/share/backgrounds -maxdepth 1 -type f \
+    \( -name 'minios*-standard.*' -o -name 'minios*-minimum.*' \
+       -o -name 'minios*-toolbox.*' -o -name 'minios*-ultra.*' \) 2>/dev/null |
+    sort | head -1)"
+
+if [ -n "${MINIOS_WALLPAPER}" ]; then
+    SCHEMA_DIR=/usr/share/glib-2.0/schemas
+    OVERRIDE="${SCHEMA_DIR}/99_minios-background.gschema.override"
+    : >"${OVERRIDE}"
+
+    # Only reference schemas that are actually installed; glib-compile-schemas
+    # warns on unknown ones and a stray entry would be silently useless.
+    for SCHEMA in org.mate.background org.ukui.interface; do
+        if grep -rqs "id=\"${SCHEMA}\"" "${SCHEMA_DIR}"; then
+            {
+                echo "[${SCHEMA}]"
+                echo "picture-filename='${MINIOS_WALLPAPER}'"
+                echo "picture-options='zoom'"
+                echo
+            } >>"${OVERRIDE}"
+        else
+            echo "Note: schema ${SCHEMA} not installed, skipping its wallpaper override."
+        fi
+    done
+
+    if [ -s "${OVERRIDE}" ]; then
+        glib-compile-schemas "${SCHEMA_DIR}"
+        echo "Wallpaper default set to ${MINIOS_WALLPAPER}"
+    else
+        rm -f "${OVERRIDE}"
+        echo "Warning: no UKUI/MATE background schema found; wallpaper left at package default." >&2
+    fi
+else
+    echo "Warning: no MiniOS wallpaper found in /usr/share/backgrounds." >&2
+fi
+
+# The MiniOS installer is launched from its own tooling, not from the menu.
+rm -f /usr/share/applications/minios-installer.desktop
+
+if [ -f /usr/share/applications/yad-icon-browser.desktop ]; then
+    rm -f /usr/share/applications/yad-icon-browser.desktop
+fi

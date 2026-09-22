@@ -24,6 +24,28 @@ dracut)
         echo -e "   ${YELLOW}INITRAMFS_BUILDER=dracut${ENDCOLOR}"
     fi
 
+    # Debian moved switch_root out of util-linux and into util-linux-extra
+    # after trixie (trixie: /usr/sbin/switch_root in util-linux; forky:
+    # /usr/bin/switch_root in util-linux-extra).  util-linux only Recommends
+    # util-linux-extra, and MiniOS sets APT::Install-Recommends "0", so it is
+    # absent and dracut aborts with "Failed to install switch_root".
+    #
+    # dracut embeds switch_root into the initramfs, so it is only needed while
+    # the image is being assembled -- installing it here keeps it out of the
+    # shipped system.  This overlay layer is discarded after /boot is extracted.
+    if ! command -v switch_root >/dev/null 2>&1; then
+        echo "I: switch_root not found; installing util-linux-extra for the initramfs build"
+        export DEBIAN_FRONTEND=noninteractive
+        # Module cleanup strips /var/lib/apt/lists, so refresh the index first;
+        # without it apt cannot resolve the package name at all.
+        apt-get update -qq || echo "W: apt-get update failed" >&2
+        if apt-get install -y --no-install-recommends util-linux-extra; then
+            echo "I: switch_root now at: $(command -v switch_root || echo STILL-MISSING)"
+        else
+            echo "W: could not install util-linux-extra; dracut will fail" >&2
+        fi
+    fi
+
     cd /$BUILD_SCRIPTS/initramfs/dracut-mos
     chmod 755 ./mkdracut
 

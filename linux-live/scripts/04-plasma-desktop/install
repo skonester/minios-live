@@ -1,0 +1,178 @@
+#!/bin/bash
+#
+# KDE Plasma desktop module (X11 session).
+#
+# Modelled on 04-ukui-desktop/install.  The points worth knowing:
+#   * The session is X11: plasma-workspace ships
+#     /usr/share/xsessions/plasmax11.desktop (Exec=startplasma-x11) and
+#     registers startplasma-x11 as the x-session-manager alternative, so the
+#     unchanged nodm -> /etc/X11/Xsession path of the minimum edition works.
+#     kwin-x11 registers kwin_x11 as x-window-manager.
+#   * plasma-workspace hard-depends on kwin-wayland and also ships
+#     wayland-sessions/plasma.desktop.  lightdm is pinned to plasmax11 below;
+#     sddm is intentionally NOT used because minios-live-config's sddm
+#     component writes Session=plasma.desktop (the Wayland one) into
+#     /etc/sddm.conf at boot, and that file outranks sddm.conf.d drop-ins.
+#   * minios-live-config's lightdm component writes 50-autologin.conf with
+#     only autologin-user (it derives "plasma-x" from startplasma-x11 and finds
+#     no such session), so the 60- drop-in here is what selects the session.
+
+set -e          # exit on error
+set -o pipefail # exit on pipeline error
+set -u          # treat unset variable as error
+
+. /minioslib
+. /minios_build.conf
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+rm -rf /usr/share/backgrounds
+
+# The x-cursor-theme alternative link lives at /usr/share/icons/default/
+# index.theme and update-alternatives will not create the parent directory.
+# breeze-cursor-theme (from 03-gui-base) installs into its own named
+# directory, so make sure the target directory exists before any postinst
+# tries to register a cursor alternative.
+mkdir -p /usr/share/icons/default
+
+if ! /condinapt -l "${SCRIPT_DIR}/packages.list" -c "${SCRIPT_DIR}/minios_build.conf" -m "${SCRIPT_DIR}/condinapt.map"; then
+    echo "Failed to install packages."
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Remove packaged distribution wallpapers while preserving MiniOS packages and
+# rootcopy assets.  plasma-workspace drops the "Next" set and its variants
+# into /usr/share/wallpapers.
+# ---------------------------------------------------------------------------
+for WALLPAPER_DIR in /usr/share/backgrounds /usr/share/wallpapers; do
+    [ -d "$WALLPAPER_DIR" ] || continue
+
+    while IFS= read -r -d '' WALLPAPER; do
+        WALLPAPER_OWNER="$(dpkg-query -S "$WALLPAPER" 2>/dev/null || true)"
+        [ -n "$WALLPAPER_OWNER" ] || continue
+
+        case "$WALLPAPER_OWNER" in
+        minios*) continue ;;
+        esac
+
+        rm -f -- "$WALLPAPER"
+    done < <(
+        find "$WALLPAPER_DIR" -mindepth 1 \
+            \( -type f -o -type l \) -print0
+    )
+    # Drop directories left empty by the removal above.
+    find "$WALLPAPER_DIR" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# Display manager.
+# ---------------------------------------------------------------------------
+if [ "${PACKAGE_VARIANT}" = "minimum" ]; then
+    # nodm autologins straight into /etc/X11/Xsession, which runs the skel
+    # ~/.xsession (exec startplasma-x11) or, failing that, x-session-manager.
+    cat <<'NODM' >/etc/default/nodm
+# nodm configuration
+
+# Set NODM_ENABLED to something different than 'false' to enable nodm
+NODM_ENABLED=true
+
+# User to autologin for
+NODM_USER=live
+
+# First vt to try when looking for free VTs
+NODM_FIRST_VT=7
+
+# X session
+NODM_XSESSION=/etc/X11/Xsession
+
+# Options for nodm itself
+NODM_OPTIONS=
+
+# Options for the X server.
+NODM_X_OPTIONS='-nolisten tcp'
+
+# If an X session will run for less than this time in seconds, nodm will wait an
+# increasing bit of time before restarting the session.
+NODM_MIN_SESSION_TIME=60
+
+# Timeout (in seconds) to wait for X to be ready to accept connections.
+NODM_X_TIMEOUT=300
+NODM
+else
+    # 60- sorts after live-config's 50-autologin.conf, so these keys win.
+    # Both user-session and autologin-session are set: the first is what a
+    # user gets from the greeter, the second is what autologin uses.
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat <<LIGHTDM >/etc/lightdm/lightdm.conf.d/60-minios-plasma.conf
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=plasmax11
+autologin-session=plasmax11
+autologin-user=${LIVE_USERNAME}
+autologin-user-timeout=0
+LIGHTDM
+fi
+
+# ---------------------------------------------------------------------------
+# Wallpaper.
+#
+# Plasma's default wallpaper is named by the Breeze look-and-feel package:
+#   /usr/share/plasma/look-and-feel/org.kde.breeze.desktop/contents/defaults
+#     [Wallpaper]
+#     Image=Next
+# where "Next" is a wallpaper package under /usr/share/wallpapers/<Name>/ with
+# a metadata.json and contents/images/<WxH>.<ext>.  The MiniOS artwork is
+# wrapped into such a package and the defaults are pointed at it.  This is a
+# default, so it applies to every user without touching dconf/kconfig state.
+# ---------------------------------------------------------------------------
+MINIOS_WALLPAPER="$(find /usr/share/backgrounds -maxdepth 1 -type f \
+    \( -name 'minios*-standard.*' -o -name 'minios*-minimum.*' \
+       -o -name 'minios*-toolbox.*' -o -name 'minios*-ultra.*' \) 2>/dev/null |
+    sort | head -1)"
+
+if [ -n "${MINIOS_WALLPAPER}" ]; then
+    PKG_DIR=/usr/share/wallpapers/MiniOS
+    mkdir -p "${PKG_DIR}/contents/images"
+
+    # Plasma picks the image whose name is closest to the screen resolution.
+    # `file` reports "..., 3840x2160, ..." for JPEG and "..., 3840 x 2160, ..."
+    # for PNG; fall back to a generic name when it cannot be parsed.
+    GEOMETRY="$(file -b "${MINIOS_WALLPAPER}" | grep -oE '[0-9]{3,5} ?x ?[0-9]{3,5}' | head -1 | tr -d ' ')"
+    [ -n "${GEOMETRY}" ] || GEOMETRY="3840x2160"
+    EXT="${MINIOS_WALLPAPER##*.}"
+    ln -sf "${MINIOS_WALLPAPER}" "${PKG_DIR}/contents/images/${GEOMETRY}.${EXT}"
+    ln -sf "${MINIOS_WALLPAPER}" "${PKG_DIR}/contents/screenshot.${EXT}"
+
+    cat <<'METADATA' >"${PKG_DIR}/metadata.json"
+{
+    "KPlugin": {
+        "Authors": [ { "Name": "MiniOS" } ],
+        "Id": "MiniOS",
+        "License": "CC-BY-SA-4.0",
+        "Name": "MiniOS"
+    }
+}
+METADATA
+
+    FOUND=0
+    for DEFAULTS in /usr/share/plasma/look-and-feel/org.kde.breeze*.desktop/contents/defaults; do
+        [ -f "${DEFAULTS}" ] || continue
+        sed -i '/^\[Wallpaper\]/,/^\[/ s/^Image=.*/Image=MiniOS/' "${DEFAULTS}"
+        FOUND=1
+    done
+    if [ "${FOUND}" = 1 ]; then
+        echo "Wallpaper default set to ${MINIOS_WALLPAPER} (wallpaper package MiniOS)"
+    else
+        echo "Warning: no Breeze look-and-feel defaults found; wallpaper left at package default." >&2
+    fi
+else
+    echo "Warning: no MiniOS wallpaper found in /usr/share/backgrounds." >&2
+fi
+
+# The MiniOS installer is launched from its own tooling, not from the menu.
+rm -f /usr/share/applications/minios-installer.desktop
+
+if [ -f /usr/share/applications/yad-icon-browser.desktop ]; then
+    rm -f /usr/share/applications/yad-icon-browser.desktop
+fi

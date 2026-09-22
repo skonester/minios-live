@@ -34,3 +34,16 @@ MiniOS was created by:
 - [betcher](https://github.com/betcher) - developer of the ROSA Barium and contributor to the MiniOS project
 - [gumanzoy](https://github.com/gumanzoy) - developer of the PocketHandyBox and contributor to the MiniOS project
 - [xDoofy92](https://github.com/xDoofy92) - media support for the MiniOS project
+
+## 🔀 About This Fork
+
+This fork builds MiniOS on Debian 14 (forky) with the KDE Plasma desktop and ships the Apx container-based package manager alongside it. It keeps everything that makes MiniOS what it is — a portable, live-bootable system that runs from a USB stick and remembers your changes — and pairs it with a full-featured desktop and a way to install software from other Linux distributions without touching the base system.
+
+What you get:
+
+- **A current Debian base.** Built on Debian 14, so the kernel, drivers and applications are recent.
+- **KDE Plasma.** A complete, polished desktop with the MiniOS look, booting straight to the desktop as a live user.
+- **Apx.** Install packages from Debian, Fedora, Arch, Alpine and others in isolated containers; they show up as ordinary applications while the live system stays clean.
+- **MiniOS tooling.** The installer, module manager, store, kernel manager and the rest of the MiniOS utilities are all present.
+
+Upstream MiniOS remains the reference project; this fork tracks it and only adds what is described above.

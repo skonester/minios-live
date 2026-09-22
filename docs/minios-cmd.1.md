@@ -14,7 +14,7 @@ minios-cmd - configure and build a MiniOS image
 
 **minios-cmd** is a command-line frontend for **minios-live**(1). It copies a configuration template or an existing configuration into a work directory, applies frontend values, and runs a complete build.
 
-The default configuration currently lists Debian **buster**, **bullseye**, **bookworm**, and **trixie**; Ubuntu **bionic**, **focal**, **jammy**, **noble**, and **resolute**; and Devuan **beowulf**, **chimaera**, **daedalus**, and **excalibur**. It lists **amd64**, **i386**, and **i386-pae** architectures; **core**, **flux**, **xfce**, and **lxqt** environments; **minimum**, **standard**, **toolbox**, and **ultra** variants; and **xz**, **lzo**, **gz**, **lz4**, and **zstd** compression.
+The default configuration currently lists Debian **buster**, **bullseye**, **bookworm**, **trixie**, and **forky**; Ubuntu **bionic**, **focal**, **jammy**, **noble**, and **resolute**; and Devuan **beowulf**, **chimaera**, **daedalus**, and **excalibur**. It lists **amd64**, **i386**, and **i386-pae** architectures; **core**, **flux**, **xfce**, **lxqt**, and **ukui** environments (**ukui** needs **forky** or newer); **minimum**, **standard**, **toolbox**, and **ultra** variants; and **xz**, **lzo**, **gz**, **lz4**, and **zstd** compression.
 
 Not every combination is necessarily available. The current configuration, environment links, and repositories determine what can be built.
 

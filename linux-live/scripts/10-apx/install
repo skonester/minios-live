@@ -1,0 +1,133 @@
+#!/bin/bash
+#
+# Apx module.
+#
+# Apx (https://github.com/Vanilla-OS/apx) is Vanilla OS's package manager: a
+# wrapper that installs packages and runs commands inside managed distrobox
+# containers.  It is not packaged in Debian, so this module compiles the
+# upstream Go source inside the chroot and throws the toolchain away again.
+#
+# Why the toolchain is installed with apt-get rather than condinapt:
+# condinapt's list is the module's *runtime* contract.  The Go compiler is a
+# build-time artefact that must not survive into the SquashFS module, so it is
+# installed, used and purged inside this script.  Everything a module's
+# `install` script leaves behind is what ends up in the module.
+#
+# Note on the `build` hook: MiniOS only packs a module from `squashfs-root`
+# when `is_dkms_build` is present, so a plain `build` script would produce no
+# module at all here.  Compiling from `install` is the correct path.
+
+set -e          # exit on error
+set -o pipefail # exit on pipeline error
+set -u          # treat unset variable as error
+
+. /minioslib
+. /minios_build.conf
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+# Upstream revision to build.  Pinned rather than tracking a branch so the
+# image is reproducible; bump deliberately.
+APX_REPO="https://github.com/Vanilla-OS/apx.git"
+APX_REF="36f2e86"   # v3.1.2 + 1 commit ("docs: Update docs for Reunion")
+
+# ---------------------------------------------------------------------------
+# Runtime dependencies
+# ---------------------------------------------------------------------------
+if ! /condinapt -l "${SCRIPT_DIR}/packages.list" -c "${SCRIPT_DIR}/minios_build.conf" -m "${SCRIPT_DIR}/condinapt.map"; then
+    echo "Failed to install packages."
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Build toolchain, used and then removed.
+#
+# Record the package set before and after so that exactly what this step added
+# -- including pulled-in dependencies -- is purged afterwards.  Purging a fixed
+# list would risk removing something an earlier module had already installed,
+# which in an overlay would whiteout the file rather than free any space.
+# ---------------------------------------------------------------------------
+dpkg-query -W -f='${Package}\n' 2>/dev/null | sort -u >/tmp/apx-pkgs.before
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y --no-install-recommends golang-go git make
+
+dpkg-query -W -f='${Package}\n' 2>/dev/null | sort -u >/tmp/apx-pkgs.after
+comm -13 /tmp/apx-pkgs.before /tmp/apx-pkgs.after >/tmp/apx-pkgs.added
+
+GO_VERSION="$(go version 2>/dev/null || true)"
+echo "Building apx ${APX_REF} with: ${GO_VERSION:-<no go found>}"
+
+# apx v3 requires Go >= 1.25; trixie's 1.24 is too old, forky ships 1.26.
+if ! go version 2>/dev/null | grep -qE 'go1\.(2[5-9]|[3-9][0-9])'; then
+    echo "ERROR: apx v3 needs Go >= 1.25, found: ${GO_VERSION:-none}" >&2
+    echo "       Build on Debian forky or newer." >&2
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Compile and install
+# ---------------------------------------------------------------------------
+export GOPATH=/tmp/apx-gopath
+export GOCACHE=/tmp/apx-gocache
+export GOMODCACHE=/tmp/apx-gomodcache
+export GOFLAGS=-mod=mod
+
+APX_SRC=/tmp/apx-src
+rm -rf "${APX_SRC}"
+git clone --recursive "${APX_REPO}" "${APX_SRC}"
+git -C "${APX_SRC}" checkout --quiet "${APX_REF}"
+git -C "${APX_SRC}" submodule update --init --recursive
+
+make -C "${APX_SRC}" build
+make -C "${APX_SRC}" install PREFIX=/usr DESTDIR=/
+make -C "${APX_SRC}" install-manpages PREFIX=/usr DESTDIR=/
+
+command -v apx >/dev/null 2>&1 || { echo "ERROR: apx did not install" >&2; exit 1; }
+echo "Installed: $(apx --version 2>/dev/null || echo 'apx (version query unsupported)')"
+
+# ---------------------------------------------------------------------------
+# Rootless podman for the live user.
+#
+# The live user does not exist yet -- minios-live-config creates it at boot --
+# but /etc/subuid and /etc/subgid are keyed by name, not uid, so the ranges can
+# be declared now and will apply when the account appears.
+# ---------------------------------------------------------------------------
+for FILE in /etc/subuid /etc/subgid; do
+    touch "${FILE}"
+    if ! grep -q "^${LIVE_USERNAME}:" "${FILE}"; then
+        echo "${LIVE_USERNAME}:100000:65536" >>"${FILE}"
+    fi
+done
+
+# Containers need a registry list; Debian's podman ships none by default.
+mkdir -p /etc/containers
+if [ ! -s /etc/containers/registries.conf ]; then
+    cat <<'REGISTRIES' >/etc/containers/registries.conf
+unqualified-search-registries = ["docker.io", "ghcr.io", "registry.fedoraproject.org"]
+REGISTRIES
+fi
+
+# Apx's own configuration, as installed by `make install`, points at the
+# bundled distrobox.  Keep the overlay-friendly storage driver.
+if [ -f /etc/apx/apx.json ]; then
+    echo "apx configuration:"
+    cat /etc/apx/apx.json
+fi
+
+# ---------------------------------------------------------------------------
+# Tear the toolchain back down
+# ---------------------------------------------------------------------------
+rm -rf "${APX_SRC}" "${GOPATH}" "${GOCACHE}" "${GOMODCACHE}"
+
+if [ -s /tmp/apx-pkgs.added ]; then
+    echo "Purging build-only packages: $(tr '\n' ' ' </tmp/apx-pkgs.added)"
+    xargs -r apt-get purge -y </tmp/apx-pkgs.added
+fi
+apt-get clean
+rm -f /tmp/apx-pkgs.before /tmp/apx-pkgs.after /tmp/apx-pkgs.added
+
+# Module name/version metadata.
+echo "PACKAGE=apx" >/.package
+echo "VERSION=${APX_REF}" >>/.package

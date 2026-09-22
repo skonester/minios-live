@@ -1,0 +1,5 @@
+# KWallet is disabled on the live system: without libpam-kwallet there is no
+# unlock-at-login, so the first stored Wi-Fi secret would otherwise pop up a
+# "create a wallet" wizard on a session that is thrown away at reboot.
+[Wallet]
+Enabled=false

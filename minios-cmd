@@ -137,6 +137,9 @@ help() {
     echo -e "  $(gettext "10. Create an Ubuntu system image with Ubuntu Pro subscription for fresh packages:")"
     echo -e "     $(basename $0) -d jammy -a amd64 -de xfce -pv standard --ubuntu-pro-token YOUR_TOKEN_HERE"
     echo ""
+    echo -e "  $(gettext "11. Create a UKUI system image (requires the 'forky' distribution, Debian 14):")"
+    echo -e "     $(basename $0) -d forky -a amd64 -de ukui -pv standard"
+    echo ""
     echo -e "  $(basename $0) $(gettext "has many more options available. Please refer to the above options list for more details.")"
     exit 0
 }

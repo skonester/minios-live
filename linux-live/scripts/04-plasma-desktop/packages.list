@@ -1,0 +1,119 @@
+# ============================================================================
+# == KDE Plasma desktop environment (X11 session)                          ==
+# ============================================================================
+#
+# Plasma is run as an X11 session (startplasma-x11 + kwin_x11) so that it sits
+# on the same Xorg / nodm / lightdm / xrdp stack as the other MiniOS desktops.
+# plasma-workspace hard-depends on kwin-wayland, so the Wayland session is
+# present but is never selected: the display manager is pinned to plasmax11.
+#
+# The build chroot sets APT::Install-Recommends "0", so everything wanted is
+# listed explicitly.  Deliberately NOT pulled in from plasma-desktop's
+# Recommends: kde-config-sddm/sddm (would race lightdm for the display
+# manager and live-config would then pick the Wayland session), fonts-noto
+# (the full family is enormous; fonts-noto-core is enough), plasma-discover
+# (MiniOS has minios-store), plasma-welcome, plasma-browser-integration.
+#
+# ========================================
+# == Session core (all editions)        ==
+# ========================================
+plasma-desktop
+plasma-workspace
+kwin-x11
+polkit-kde-agent-1
+kde-cli-tools
+plasma-integration
+systemsettings
+kscreen
+plasma-nm
+breeze
+breeze-gtk-theme
+kde-config-gtk-style
+dolphin
+konsole
+kwrite
+ark
+
+# ========================================
+# == Base desktop support               ==
+# ========================================
+at-spi2-core
+dbus-x11
+gtk-update-icon-cache
+gvfs
+gvfs-backends
+libglib2.0-bin
+libxml2-utils
+xmlstarlet
+xdg-user-dirs
+udisks2
+librsvg2-common
+
+# MiniOS artwork.  The `install` script wraps the MiniOS wallpaper into a
+# Plasma wallpaper package and points the Breeze look-and-feel at it.
+minios6-artwork
+minios6-wallpapers-minimum +pv=minimum
+minios6-wallpapers-standard +pv=standard
+minios6-wallpapers-toolbox +pv=toolbox
+minios6-wallpapers-ultra +pv=ultra
+
+# ========================================
+# == Minimum edition (only)             ==
+# ========================================
+alsa-utils +pv=minimum
+nodm +pv=minimum
+
+# ========================================
+# == Standard edition (and above)       ==
+# ========================================
+lightdm -pv=minimum
+lightdm-gtk-greeter -pv=minimum
+powerdevil -pv=minimum
+plasma-pa -pv=minimum
+plasma-systemmonitor -pv=minimum
+plasma-widgets-addons -pv=minimum
+kde-config-screenlocker -pv=minimum
+kinfocenter -pv=minimum
+kio-extras -pv=minimum
+kdegraphics-thumbnailers -pv=minimum
+ffmpegthumbs -pv=minimum
+kde-spectacle -pv=minimum
+gwenview -pv=minimum
+kdialog -pv=minimum
+bluedevil -pv=minimum
+xdg-desktop-portal-kde -pv=minimum
+
+# Plasma's default UI fonts.  Without them Qt falls back to DejaVu, which is
+# fine but not what the Breeze theme was designed around.
+fonts-noto-core -pv=minimum
+fonts-hack -pv=minimum
+
+avahi-daemon -pv=minimum
+samba-common -pv=minimum
+
+# Audio.  forky is new enough for the PipeWire stack.
+pipewire -pv=minimum
+pipewire-pulse -pv=minimum
+wireplumber -pv=minimum
+pipewire-audio-client-libraries -pv=minimum
+libspa-0.2-bluetooth -pv=minimum
+dbus-user-session -pv=minimum
+
+# MiniOS tooling.  minios-session-manager is deliberately absent: it depends on
+# dynfilefs, which still links libfuse2 and is therefore unsatisfiable on forky.
+minios-configurator -pv=minimum
+minios-installer -pv=minimum
+minios-kernel-manager -pv=minimum
+minios-store -pv=minimum
+minios-store-gui -pv=minimum
+minios-image-builder -pv=minimum
+minios-module-manager -pv=minimum
+minios-help -pv=minimum
+driveutility -pv=minimum
+
+# ========================================
+# == Toolbox edition (and above)        ==
+# ========================================
+kmenuedit +pv=toolbox +pv=ultra
+filelight +pv=toolbox +pv=ultra
+open-vm-tools-desktop +pv=toolbox +pv=ultra

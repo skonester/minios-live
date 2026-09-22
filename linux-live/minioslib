@@ -337,7 +337,7 @@ common_variables() {
             DISTRIBUTION_URL="http://deb.freexian.com/extended-lts"
         fi
         ;;
-    bullseye | bookworm | trixie | sid)
+    bullseye | bookworm | trixie | forky | testing | sid)
         if [ "${BUILD_FROM_SNAPSHOT}" = "true" ]; then
             DISTRIBUTION_URL="https://snapshot.debian.org/archive/debian/${SNAPSHOT_DATE}"
         else
@@ -2015,6 +2015,34 @@ Pin: release l=MiniOS Repository
 Pin-Priority: 1001
 EOF
         cache_cp "etc/apt/preferences.d/minios-linux"
+    fi
+
+    # ----------------------------------------------------------------------- #
+    # FUSE 2 for forky.
+    #
+    # Debian removed FUSE 2 after trixie: forky has no libfuse2 and nothing
+    # provides it.  The MiniOS repository ships dynfilefs linked against
+    # libfuse2, and minios-session depends on dynfilefs, so the persistent-
+    # session backend is uninstallable on forky without it.
+    #
+    # trixie's libfuse2t64 (2.9.9-9) declares "Provides: libfuse2" and depends
+    # on nothing but libc6 (>= 2.38), which forky satisfies, so it is pulled in
+    # from trixie on its own.  The negative pin on everything else from trixie
+    # keeps this to exactly one leaf library rather than opening a second suite
+    # to the solver.  Drop this once dynfilefs is rebuilt against FUSE 3.
+    # ----------------------------------------------------------------------- #
+    if [ "${DISTRIBUTION}" = "forky" ]; then
+        mkdir -p "${INSTALL_DIR}/etc/apt/preferences.d"
+        cat >"${INSTALL_DIR}/etc/apt/preferences.d/minios-fuse2" <<EOF
+Package: *
+Pin: release n=trixie
+Pin-Priority: -10
+
+Package: libfuse2t64
+Pin: release n=trixie
+Pin-Priority: 600
+EOF
+        cache_cp "etc/apt/preferences.d/minios-fuse2"
     fi
 
     if [ "${USE_APT_CACHE_REPO}" = "true" ]; then
@@ -4495,6 +4523,37 @@ copy_kernel_runtime_payload() {
 }
 
 # This function mounts file systems for modules within a chroot environment.
+# Mount a module image read-only, falling back to squashfuse.
+#
+# Not every kernel is built with every SquashFS decompressor.  The WSL2 kernel,
+# for instance, has ZLIB/LZO/LZ4/XZ but no CONFIG_SQUASHFS_ZSTD, so it refuses
+# MiniOS's default zstd modules with:
+#   Filesystem uses "zstd" compression. This is not supported.
+#
+# squashfuse decodes in userspace and overlayfs stacks on the resulting mount,
+# so fall back to it rather than forcing a different COMP_TYPE into the shipped
+# image.  This only affects the build host; the module stays zstd.
+mount_module_image() {
+    local IMAGE="${1}" TARGET="${2}" ERR
+
+    if ERR="$(mount -o ro "${IMAGE}" "${TARGET}" 2>&1)"; then
+        return 0
+    fi
+
+    if command -v squashfuse >/dev/null 2>&1; then
+        warning "Kernel cannot mount ${CYAN}$(basename "${IMAGE}")${ENDCOLOR} (${ERR}). Falling back to squashfuse."
+        if squashfuse "${IMAGE}" "${TARGET}"; then
+            return 0
+        fi
+        error "squashfuse also failed to mount ${IMAGE}."
+        return 1
+    fi
+
+    error "Failed to mount ${IMAGE}: ${ERR}"
+    error "Install ${CYAN}squashfuse${ENDCOLOR} to mount images this kernel does not support."
+    return 1
+}
+
 overlay_chroot_mount_fs() {
     current_function
 
@@ -4507,7 +4566,7 @@ overlay_chroot_mount_fs() {
     for ((i = ${#MODULES[@]} - 1; i >= 0; i--)); do
         BUNDLE=$(basename "${MODULES[$i]}" ."${BEXT}")
         mkdir -p "${OVERLAYS}/bundles/${BUNDLE}"
-        mount -o ro "${MODULES[$i]}" "${OVERLAYS}/bundles/${BUNDLE}"
+        mount_module_image "${MODULES[$i]}" "${OVERLAYS}/bundles/${BUNDLE}" || exit 1
     done
     toggle_shell_options e
     filter_modules "${OVERLAYS}/bundles/"

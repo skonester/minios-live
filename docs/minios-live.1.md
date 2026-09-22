@@ -14,7 +14,7 @@ minios-live - build MiniOS ISO images in ordered stages
 
 **minios-live** builds a MiniOS live system as an ordered sequence of stages. It creates a base system, layered SquashFS modules, boot files, configuration data, and the final ISO.
 
-The default **build.conf** currently lists Debian **buster**, **bullseye**, **bookworm**, and **trixie**; Ubuntu **bionic**, **focal**, **jammy**, **noble**, and **resolute**; and Devuan **beowulf**, **chimaera**, **daedalus**, and **excalibur**. It lists **amd64**, **i386**, and **i386-pae** architectures; **core**, **flux**, **xfce**, and **lxqt** environments; **minimum**, **standard**, **toolbox**, and **ultra** variants; and **xz**, **lzo**, **gz**, **lz4**, and **zstd** compression.
+The default **build.conf** currently lists Debian **buster**, **bullseye**, **bookworm**, **trixie**, and **forky**; Ubuntu **bionic**, **focal**, **jammy**, **noble**, and **resolute**; and Devuan **beowulf**, **chimaera**, **daedalus**, and **excalibur**. It lists **amd64**, **i386**, and **i386-pae** architectures; **core**, **flux**, **xfce**, **lxqt**, and **ukui** environments (**ukui** needs **forky** or newer); **minimum**, **standard**, **toolbox**, and **ultra** variants; and **xz**, **lzo**, **gz**, **lz4**, and **zstd** compression.
 
 Not every combination is necessarily available. The installed configuration, selected environment, and configured repositories determine what can be built.
 

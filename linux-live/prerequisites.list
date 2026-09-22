@@ -8,6 +8,13 @@ mtools
 rsync
 grub-common
 gpg
+# efi-acquire verifies the signed shim/GRUB debs with gpgv, which is a
+# separate package from gpg.
+gpgv
 curl
 openssl
 sbsigntool
+
+# Userspace SquashFS mount, used when the build host kernel lacks a
+# decompressor the image needs (e.g. no CONFIG_SQUASHFS_ZSTD on WSL2).
+squashfuse

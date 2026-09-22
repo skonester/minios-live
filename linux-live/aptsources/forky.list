@@ -1,0 +1,15 @@
+deb http://deb.debian.org/debian forky main contrib non-free non-free-firmware
+#deb-src http://deb.debian.org/debian forky main contrib non-free non-free-firmware
+
+deb http://deb.debian.org/debian-security/ forky-security main contrib non-free non-free-firmware
+#deb-src http://deb.debian.org/debian-security/ forky-security main contrib non-free non-free-firmware
+
+deb http://deb.debian.org/debian forky-updates main contrib non-free non-free-firmware
+#deb-src http://deb.debian.org/debian forky-updates main contrib non-free non-free-firmware
+
+# FUSE 2 only.  Debian dropped libfuse2 after trixie, but the MiniOS repository
+# still ships dynfilefs linked against it and minios-session depends on
+# dynfilefs.  Everything from trixie is pinned to -10 except libfuse2t64, which
+# Provides: libfuse2 and needs nothing but libc6 -- see the minios-fuse2 pin in
+# linux-live/minioslib.  Remove both once dynfilefs is rebuilt against FUSE 3.
+deb http://deb.debian.org/debian trixie main

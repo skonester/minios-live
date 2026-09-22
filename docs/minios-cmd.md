@@ -6,9 +6,10 @@
 
 The default `linux-live/build.conf` currently lists:
 
-- **Distributions:** Debian `buster`, `bullseye`, `bookworm`, `trixie`; Ubuntu `bionic`, `focal`, `jammy`, `noble`, `resolute`; Devuan `beowulf`, `chimaera`, `daedalus`, `excalibur`
+- **Distributions:** Debian `buster`, `bullseye`, `bookworm`, `trixie`, `forky`; Ubuntu `bionic`, `focal`, `jammy`, `noble`, `resolute`; Devuan `beowulf`, `chimaera`, `daedalus`, `excalibur`
 - **Architectures:** `amd64`, `i386`, `i386-pae`
-- **Desktop environments:** `core`, `flux`, `xfce`, `lxqt`
+- **Desktop environments:** `core`, `flux`, `xfce`, `lxqt`, `ukui`
+  - `ukui` requires `forky` (Debian 14) or newer: `trixie` has no `ukui-panel`, `ukui-session-manager` or `ukui-control-center`.
 - **Package variants:** `minimum`, `standard`, `toolbox`, `ultra`
 - **Compression:** `xz`, `lzo`, `gz`, `lz4`, `zstd`
 

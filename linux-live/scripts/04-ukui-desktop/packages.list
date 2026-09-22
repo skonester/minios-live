@@ -1,0 +1,117 @@
+# ============================================================================
+# == UKUI desktop environment                                               ==
+# ============================================================================
+#
+# UKUI 4.x needs Debian forky or newer.  Debian trixie shipped peony and ukwm
+# but dropped ukui-panel, ukui-session-manager and ukui-control-center during
+# the UKUI 3.x -> 4.x / Qt6 rewrite, so there is no usable session there.  The
+# `install` script refuses to run on a suite that cannot provide the session.
+#
+# ========================================
+# == Session core (all editions)        ==
+# ========================================
+ukui-session-manager
+ukui-panel
+ukui-settings-daemon
+ukui-menu
+ukui-polkit
+# ukui-notification-server is the Qt6 UKUI 4.x notification service.  The
+# older ukui-notification-daemon (1.0.1) is Qt5, Conflicts with it, and is
+# what ukui-sidebar refuses to coexist with -- picking it would also pull an
+# entire Qt5 stack onto the image for one daemon.
+ukui-notification-server
+ukwm
+peony
+ukui-themes
+ukui-window-switch
+
+# ========================================
+# == Base desktop support               ==
+# ========================================
+at-spi2-core
+dbus-x11
+gtk-update-icon-cache
+gvfs
+gvfs-backends
+libglib2.0-bin
+libxml2-utils
+xmlstarlet
+xdg-user-dirs
+udisks2
+librsvg2-common
+
+# MiniOS artwork.  UKUI ships ukui-wallpapers, but MiniOS replaces the
+# distribution wallpapers with its own set (see `install`).
+minios6-artwork
+minios6-wallpapers-minimum +pv=minimum
+minios6-wallpapers-standard +pv=standard
+minios6-wallpapers-toolbox +pv=toolbox
+minios6-wallpapers-ultra +pv=ultra
+
+# ========================================
+# == Minimum edition (only)             ==
+# ========================================
+alsa-utils +pv=minimum
+nodm +pv=minimum
+xarchiver +pv=minimum
+
+# ========================================
+# == Standard edition (and above)       ==
+# ========================================
+ukui-control-center -pv=minimum
+ukui-power-manager -pv=minimum
+ukui-media -pv=minimum
+ukui-sidebar -pv=minimum
+ukui-system-monitor -pv=minimum
+ukui-greeter -pv=minimum
+lightdm -pv=minimum
+peony-open-terminal -pv=minimum
+peony-share -pv=minimum
+peony-set-wallpaper -pv=minimum
+
+# kylin-nm is UKUI's own network applet and replaces network-manager-gnome,
+# which no longer has an installation candidate on forky.
+kylin-nm -pv=minimum
+blueman -pv=minimum
+avahi-daemon -pv=minimum
+
+# UKUI has no terminal or text editor of its own in Debian.  ukui-settings-daemon
+# already pulls mate-desktop-common, so the MATE applications fit the stack.
+mate-terminal -pv=minimum
+pluma -pv=minimum
+eom -pv=minimum
+engrampa -pv=minimum
+
+xdg-user-dirs-gtk -pv=minimum
+samba-common -pv=minimum
+qt6-gtk-platformtheme -pv=minimum
+
+# Audio.  forky is new enough for the PipeWire stack.
+pavucontrol -pv=minimum
+pipewire -pv=minimum
+pipewire-pulse -pv=minimum
+wireplumber -pv=minimum
+pipewire-audio-client-libraries -pv=minimum
+libspa-0.2-bluetooth -pv=minimum
+dbus-user-session -pv=minimum
+
+# MiniOS tooling.  minios-session-manager is deliberately absent: it depends on
+# dynfilefs, which still links libfuse2 and is therefore unsatisfiable on forky.
+minios-configurator -pv=minimum
+minios-installer -pv=minimum
+minios-kernel-manager -pv=minimum
+minios-store -pv=minimum
+minios-store-gui -pv=minimum
+minios-image-builder -pv=minimum
+minios-module-manager -pv=minimum
+minios-help -pv=minimum
+driveutility -pv=minimum
+
+# ========================================
+# == Toolbox edition (and above)        ==
+# ========================================
+ukui-bluetooth +pv=toolbox +pv=ultra
+ukui-notebook +pv=toolbox +pv=ultra
+kylin-burner +pv=toolbox +pv=ultra
+open-vm-tools-desktop +pv=toolbox +pv=ultra
+menulibre +pv=toolbox +pv=ultra
