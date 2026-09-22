@@ -31,6 +31,14 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 APX_REPO="https://github.com/Vanilla-OS/apx.git"
 APX_REF="36f2e86"   # v3.1.2 + 1 commit ("docs: Update docs for Reunion")
 
+# Built-in package-manager and stack definitions.  apx itself ships none:
+# Vanilla OS installs them from this separate repository into
+# /usr/share/apx/{package-managers,stacks}.  Without them `apx pkgmanagers
+# list` is empty and every user has to define apt/dnf/pacman by hand before
+# creating a single subsystem.
+APX_CONFIGS_REPO="https://github.com/Vanilla-OS/vanilla-apx-configs.git"
+APX_CONFIGS_REF="1a37e75"   # "chore: rename opensuse stack to opensuse-tumbleweed"
+
 # ---------------------------------------------------------------------------
 # Runtime dependencies
 # ---------------------------------------------------------------------------
@@ -85,7 +93,75 @@ make -C "${APX_SRC}" install PREFIX=/usr DESTDIR=/
 make -C "${APX_SRC}" install-manpages PREFIX=/usr DESTDIR=/
 
 command -v apx >/dev/null 2>&1 || { echo "ERROR: apx did not install" >&2; exit 1; }
-echo "Installed: $(apx --version 2>/dev/null || echo 'apx (version query unsupported)')"
+# apx has no --version flag, and any real invocation runs its essential
+# checks (podman in PATH, per-user directories), which are meaningless in the
+# build chroot and only produce a misleading ERROR line in the log.
+echo "Installed: apx ${APX_REF} at $(command -v apx)"
+
+# `make install` writes /etc/apx/apx.json, but the Vanilla SDK config loader
+# apx v3 links (github.com/vanilla-os/sdk pkg/v1/conf) only ever reads
+# <dir>/config.json from /usr/share/apx, /etc/apx, ~/apx, ~/.config/apx.  With
+# the file under the wrong name apx runs on an empty config, its ApxPath is
+# "" and every command fails with "Unable to find apx configuration files" /
+# "No stacks available".  Install it under the name the loader reads as well.
+install -m 644 /etc/apx/apx.json /etc/apx/config.json
+
+# Upstream ships no desktop entry: apx is a CLI.  Give the desktops something
+# to pin (see the Plasma section below) by launching an interactive shell that
+# prints the quick-start first.  The logo comes from the source tree.
+install -Dm644 "${APX_SRC}/apx-logo.svg" /usr/share/icons/hicolor/scalable/apps/apx.svg
+gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
+
+cat <<'SHELL' >/usr/bin/apx-shell
+#!/bin/sh
+# Interactive apx quick start; used by /usr/share/applications/apx.desktop.
+cat <<'BANNER'
+apx -- install packages and run programs inside managed containers (podman)
+
+  apx stacks list                              stacks to build a subsystem from
+  apx subsystems new --name dev --stack debian create a Debian subsystem "dev"
+  apx dev install htop                         install a package into it
+  apx dev run htop                             run a program from it
+  apx dev enter                                open a shell inside it
+  apx subsystems list                          what exists
+
+Stacks: alpine, arch, debian, fedora, opensuse-*, ubuntu.  Images are pulled
+from docker.io on first use, so a network connection is needed.  man apx for
+everything else.
+
+BANNER
+exec "${SHELL:-/bin/bash}" -i
+SHELL
+chmod 755 /usr/bin/apx-shell
+
+cat <<'DESKTOP' >/usr/share/applications/apx.desktop
+[Desktop Entry]
+Type=Application
+Name=Apx
+GenericName=Container Package Manager
+Comment=Install packages from other distributions inside managed containers
+Exec=apx-shell
+TryExec=apx
+Icon=apx
+Terminal=true
+Categories=System;PackageManager;
+Keywords=apx;distrobox;podman;container;package;
+DESKTOP
+
+# ---------------------------------------------------------------------------
+# Built-in package managers and stacks
+# ---------------------------------------------------------------------------
+APX_CONFIGS_SRC=/tmp/apx-configs
+rm -rf "${APX_CONFIGS_SRC}"
+git clone --quiet "${APX_CONFIGS_REPO}" "${APX_CONFIGS_SRC}"
+git -C "${APX_CONFIGS_SRC}" checkout --quiet "${APX_CONFIGS_REF}"
+
+for KIND in package-managers stacks; do
+    mkdir -p "/usr/share/apx/${KIND}"
+    install -m 644 "${APX_CONFIGS_SRC}/${KIND}"/*.yaml "/usr/share/apx/${KIND}/"
+done
+echo "Installed apx definitions: $(ls /usr/share/apx/package-managers | tr '\n' ' ')/ $(ls /usr/share/apx/stacks | tr '\n' ' ')"
+rm -rf "${APX_CONFIGS_SRC}"
 
 # ---------------------------------------------------------------------------
 # Rootless podman for the live user.
@@ -101,19 +177,43 @@ for FILE in /etc/subuid /etc/subgid; do
     fi
 done
 
-# Containers need a registry list; Debian's podman ships none by default.
-mkdir -p /etc/containers
-if [ ! -s /etc/containers/registries.conf ]; then
-    cat <<'REGISTRIES' >/etc/containers/registries.conf
-unqualified-search-registries = ["docker.io", "ghcr.io", "registry.fedoraproject.org"]
+# The built-in stacks use short image names ("debian:latest", "fedora:latest"),
+# which podman refuses to resolve unless unqualified-search-registries is set.
+# Debian's containers-common ships /etc/containers/registries.conf as a
+# fully-commented template, so it is non-empty and must not be tested for;
+# a drop-in in registries.conf.d is the supported way to add the setting.
+mkdir -p /etc/containers/registries.conf.d
+cat <<'REGISTRIES' >/etc/containers/registries.conf.d/50-minios-apx.conf
+# Registry used for images given without a registry prefix.  Every short name
+# in the shipped apx stacks (alpine, debian, fedora, ubuntu) is a docker.io
+# library image; the others are fully qualified.  A single entry is
+# deliberate: with several, podman's short-name resolution asks the user to
+# pick one on every pull.
+unqualified-search-registries = ["docker.io"]
 REGISTRIES
-fi
 
 # Apx's own configuration, as installed by `make install`, points at the
 # bundled distrobox.  Keep the overlay-friendly storage driver.
 if [ -f /etc/apx/apx.json ]; then
     echo "apx configuration:"
     cat /etc/apx/apx.json
+fi
+
+# ---------------------------------------------------------------------------
+# Plasma: pin Apx to the panel and the launcher favourites.
+#
+# 04-plasma-desktop writes the panel defaults into the default panel layout
+# template (see its install script); this module stacks on top of it, so the
+# same file is extended here when it carries those markers.  On any other
+# desktop the menu entry above is all that is needed.
+# ---------------------------------------------------------------------------
+LAYOUT_JS=/usr/share/plasma/layout-templates/org.kde.plasma.desktop.defaultPanel/contents/layout.js
+if [ -f "${LAYOUT_JS}" ]; then
+    sed -i \
+        -e '/^tasks.writeConfig("launchers", "/ s/")$/,applications:apx.desktop")/' \
+        -e '/^kickoff.writeConfig("favorites", "/ s/")$/,apx.desktop")/' \
+        "${LAYOUT_JS}"
+    echo "Apx pinned in ${LAYOUT_JS}: $(grep -c 'apx.desktop' "${LAYOUT_JS}") reference(s)"
 fi
 
 # ---------------------------------------------------------------------------

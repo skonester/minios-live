@@ -16,6 +16,10 @@
 #   * minios-live-config's lightdm component writes 50-autologin.conf with
 #     only autologin-user (it derives "plasma-x" from startplasma-x11 and finds
 #     no such session), so the 60- drop-in here is what selects the session.
+#   * Appearance defaults (Breeze Dark, Night Light) are system-wide files in
+#     rootcopy-install/etc/xdg/{kdeglobals,kwinrc}; the panel launcher button
+#     and its pinned favourites are set by patching the default panel layout
+#     template below.  Nothing is pre-seeded into a user's ~/.config.
 
 set -e          # exit on error
 set -o pipefail # exit on pipeline error
@@ -170,8 +174,102 @@ else
     echo "Warning: no MiniOS wallpaper found in /usr/share/backgrounds." >&2
 fi
 
-# The MiniOS installer is launched from its own tooling, not from the menu.
-rm -f /usr/share/applications/minios-installer.desktop
+# ---------------------------------------------------------------------------
+# Panel: application launcher (Kickoff) button and pinned favourites.
+#
+# plasmashell builds a user's first panel from the look-and-feel package's
+# layout script, and both Breeze and Breeze Dark just
+# loadTemplate("org.kde.plasma.desktop.defaultPanel").  Kickoff's own
+# settings live in the per-user appletsrc, which only exists after that first
+# start, so the one place a system-wide default can be expressed is the
+# template itself: keep the addWidget() handle and write the applet's config
+# before it is ever instantiated.
+#
+#   icon       Kickoff's compact representation is a Kirigami.Icon, which
+#              takes a file path as readily as a theme name, so the same
+#              MiniOS logo the XFCE Whisker button uses is reused here.
+#   favorites  Kickoff ports this list into KActivities on first run and
+#              never reads it again (favoritesPortedToKAstats).  Upstream's
+#              default is browser, Kontact, System Settings, Dolphin and
+#              Discover; the last four are either not installed here or
+#              duplicated by MiniOS tools, so the list is replaced with what
+#              this image actually ships -- MiniOS Store in place of any
+#              software-centre or help entry.
+#   launchers  The task manager's default pins are Discover, file manager and
+#              browser; Discover is not installed, so it renders as a blank
+#              icon.  Modules stacked on top of this one (10-apx) append their
+#              own entry to this line, so keep it on one line ending in ")".
+# ---------------------------------------------------------------------------
+LAYOUT_JS=/usr/share/plasma/layout-templates/org.kde.plasma.desktop.defaultPanel/contents/layout.js
+if [ -f "${LAYOUT_JS}" ] && grep -q '^panel.addWidget("org.kde.plasma.kickoff")$' "${LAYOUT_JS}" &&
+    grep -q '^panel.addWidget("org.kde.plasma.icontasks")$' "${LAYOUT_JS}"; then
+    sed -i '/^panel.addWidget("org.kde.plasma.kickoff")$/{
+r /dev/stdin
+d
+}' "${LAYOUT_JS}" <<'KICKOFF'
+// MiniOS: launcher button and default favourites (see 04-plasma-desktop/install)
+var kickoff = panel.addWidget("org.kde.plasma.kickoff")
+kickoff.currentConfigGroup = ["General"]
+kickoff.writeConfig("icon", "/usr/share/pixmaps/MiniOS-white.svg")
+kickoff.writeConfig("favorites", "preferred://browser,org.kde.dolphin.desktop,org.kde.konsole.desktop,systemsettings.desktop,minios-store.desktop,minios-configurator.desktop,minios-installer.desktop")
+KICKOFF
+    sed -i '/^panel.addWidget("org.kde.plasma.icontasks")$/{
+r /dev/stdin
+d
+}' "${LAYOUT_JS}" <<'TASKS'
+// MiniOS: task manager pins (see 04-plasma-desktop/install)
+var tasks = panel.addWidget("org.kde.plasma.icontasks")
+tasks.currentConfigGroup = ["General"]
+tasks.writeConfig("launchers", "preferred://filemanager,preferred://browser")
+TASKS
+    echo "Kickoff and task manager defaults written into ${LAYOUT_JS}"
+else
+    echo "Warning: default panel layout template not found or changed; panel left at package defaults." >&2
+fi
+
+# ---------------------------------------------------------------------------
+# Icons that the MiniOS tools request but Breeze does not provide.  Breeze's
+# fallback chain ends in hicolor, so anything placed there is found by every
+# Breeze variant without touching the icon theme setting.
+#
+#   isomaster        minios-image-builder; the elementary-minios theme from
+#                    03-gui-base carries a proper application icon for it.
+#   office-database  minios-module-manager; no theme in the image has it as
+#                    an app icon, so the launcher entry is pointed at Breeze's
+#                    puzzle-piece "preferences-plugin" icon (the only such icon Breeze
+#                    ships at 32px and above), the closest fit for "modules".
+# ---------------------------------------------------------------------------
+ELEMENTARY_ICONS=/usr/share/icons/elementary-minios/apps/48
+if [ -f "${ELEMENTARY_ICONS}/isomaster.svg" ]; then
+    mkdir -p /usr/share/icons/hicolor/scalable/apps
+    ln -sf "${ELEMENTARY_ICONS}/isomaster.svg" /usr/share/icons/hicolor/scalable/apps/isomaster.svg
+fi
+if [ -f /usr/share/applications/minios-module-manager.desktop ]; then
+    sed -i 's/^Icon=office-database$/Icon=preferences-plugin/' /usr/share/applications/minios-module-manager.desktop
+fi
+gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# MiniOS Installer menu entry.
+#
+# minios-installer's own desktop file carries "NotShowIn=KDE;", so Plasma hides
+# it and the live system has no "Install MiniOS" entry at all (XFCE shows it
+# because it is not KDE).  The installer is a plain GTK application that runs
+# fine here, so drop the exclusion.  Its icon, usb-creator-gtk, is not in
+# Breeze; the elementary-minios theme carries a dedicated installer icon, so
+# point the entry at that via hicolor like the other MiniOS tools above.
+# ---------------------------------------------------------------------------
+INSTALLER_DESKTOP=/usr/share/applications/minios-installer.desktop
+if [ -f "${INSTALLER_DESKTOP}" ]; then
+    sed -i '/^NotShowIn=KDE;\?$/d' "${INSTALLER_DESKTOP}"
+    if [ -f "${ELEMENTARY_ICONS}/minios-installer.svg" ]; then
+        mkdir -p /usr/share/icons/hicolor/scalable/apps
+        ln -sf "${ELEMENTARY_ICONS}/minios-installer.svg" /usr/share/icons/hicolor/scalable/apps/minios-installer.svg
+        sed -i 's/^Icon=usb-creator-gtk$/Icon=minios-installer/' "${INSTALLER_DESKTOP}"
+        gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
+    fi
+    echo "MiniOS Installer menu entry enabled for Plasma"
+fi
 
 if [ -f /usr/share/applications/yad-icon-browser.desktop ]; then
     rm -f /usr/share/applications/yad-icon-browser.desktop

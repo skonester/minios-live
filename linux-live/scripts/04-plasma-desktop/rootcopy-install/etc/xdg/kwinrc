@@ -1,0 +1,10 @@
+# System-wide KWin defaults; see /etc/xdg/kdeglobals for how this cascades.
+
+# Night Light is on from the first session.  Plasma 6.7 knows two modes:
+# Constant (always at NightTemperature) and DarkLight (warm only while the
+# system-wide dark/light schedule is in its dark phase).  Constant is chosen
+# because the live system has no location service and its clock is UTC by
+# default, so any schedule-driven mode would fire at the wrong hours.
+[NightColor]
+Active=true
+Mode=Constant

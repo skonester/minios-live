@@ -1,0 +1,20 @@
+# System-wide Plasma defaults.  KConfig cascades /etc/xdg/<file> under the
+# user's ~/.config/<file>, so everything here is a default that any user can
+# still override from System Settings; nothing is written into the skel.
+#
+# These are the values Breeze Dark's look-and-feel package would apply
+# (/usr/share/plasma/look-and-feel/org.kde.breezedark.desktop/contents/defaults),
+# spelled out because a look-and-feel's defaults only take effect when a user
+# *applies* the package, never on a fresh session.  LookAndFeelPackage itself
+# is set so that plasmashell builds its first layout from Breeze Dark and the
+# Global Theme page shows it selected.
+
+[KDE]
+LookAndFeelPackage=org.kde.breezedark
+widgetStyle=Breeze
+
+[General]
+ColorScheme=BreezeDark
+
+[Icons]
+Theme=breeze-dark
